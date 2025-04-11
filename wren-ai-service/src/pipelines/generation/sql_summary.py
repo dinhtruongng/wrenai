@@ -55,12 +55,17 @@ class SQLSummaryPostProcessor:
     )
     def run(self, sqls: List[str], replies: List[str]):
         try:
+            reply = replies[0]
+            json_start = reply.find("{")
+            json_end = reply.rfind("}")
+            if json_start == -1 or json_end == -1:
+                raise ValueError("Invalid JSON format")
+            json_str = reply[json_start : json_end + 1].strip()
+
             return {
                 "sql_summary_results": [
                     {"sql": sql, "summary": summary["summary"]}
-                    for (sql, summary) in zip(
-                        sqls, orjson.loads(replies[0])["sql_summary_results"]
-                    )
+                    for (sql, summary) in zip(sqls, orjson.loads(json_str)["sql_summary_results"])
                 ],
             }
         except Exception as e:
@@ -134,9 +139,7 @@ class SQLSummary(BasicPipeline):
             "post_processor": SQLSummaryPostProcessor(),
         }
 
-        super().__init__(
-            AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult())
-        )
+        super().__init__(AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult()))
 
     @observe(name="SQL Summary")
     async def run(

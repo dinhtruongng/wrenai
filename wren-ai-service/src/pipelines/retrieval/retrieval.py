@@ -12,6 +12,7 @@ from haystack.components.builders.prompt_builder import PromptBuilder
 from langfuse.decorators import observe
 from pydantic import BaseModel
 
+from src.core.engine import clean_generation_result
 from src.core.pipeline import BasicPipeline
 from src.core.provider import DocumentStoreProvider, EmbedderProvider, LLMProvider
 from src.pipelines.common import build_table_ddl
@@ -108,9 +109,7 @@ def _build_metric_ddl(content: dict) -> str:
 
 
 def _build_view_ddl(content: dict) -> str:
-    return (
-        f"{content['comment']}CREATE VIEW {content['name']}\nAS {content['statement']}"
-    )
+    return f"{content['comment']}CREATE VIEW {content['name']}\nAS {content['statement']}"
 
 
 ## Start of Pipeline
@@ -143,9 +142,7 @@ async def table_retrieval(
     }
 
     if project_id:
-        filters["conditions"].append(
-            {"field": "project_id", "operator": "==", "value": project_id}
-        )
+        filters["conditions"].append({"field": "project_id", "operator": "==", "value": project_id})
 
     if embedding:
         return await table_retriever.run(
@@ -153,9 +150,7 @@ async def table_retrieval(
             filters=filters,
         )
     else:
-        filters["conditions"].append(
-            {"field": "name", "operator": "in", "value": tables}
-        )
+        filters["conditions"].append({"field": "name", "operator": "in", "value": tables})
 
         return await table_retriever.run(
             query_embedding=[],
@@ -174,8 +169,7 @@ async def dbschema_retrieval(
         table_names.append(content["name"])
 
     table_name_conditions = [
-        {"field": "name", "operator": "==", "value": table_name}
-        for table_name in table_names
+        {"field": "name", "operator": "==", "value": table_name} for table_name in table_names
     ]
 
     filters = {
@@ -187,9 +181,7 @@ async def dbschema_retrieval(
     }
 
     if project_id:
-        filters["conditions"].append(
-            {"field": "project_id", "operator": "==", "value": project_id}
-        )
+        filters["conditions"].append({"field": "project_id", "operator": "==", "value": project_id})
 
     results = await dbschema_retriever.run(query_embedding=[], filters=filters)
     return results["documents"]
@@ -264,9 +256,7 @@ def check_using_db_schemas_without_pruning(
                 }
             )
 
-    table_ddls = [
-        retrieval_result["table_ddl"] for retrieval_result in retrieval_results
-    ]
+    table_ddls = [retrieval_result["table_ddl"] for retrieval_result in retrieval_results]
     _token_count = len(encoding.encode(" ".join(table_ddls)))
     if _token_count > 100_000 or not allow_using_db_schemas_without_pruning:
         return {
@@ -293,17 +283,12 @@ def prompt(
     histories: Optional[list[AskHistory]] = None,
 ) -> dict:
     if not check_using_db_schemas_without_pruning["db_schemas"]:
-        logger.info(
-            "db_schemas token count is greater than 100,000, so we will prune columns"
-        )
+        logger.info("db_schemas token count is greater than 100,000, so we will prune columns")
         db_schemas = [
-            build_table_ddl(construct_db_schema)[0]
-            for construct_db_schema in construct_db_schemas
+            build_table_ddl(construct_db_schema)[0] for construct_db_schema in construct_db_schemas
         ]
 
-        previous_query_summaries = (
-            [history.question for history in histories] if histories else []
-        )
+        previous_query_summaries = [history.question for history in histories] if histories else []
 
         query = "\n".join(previous_query_summaries) + "\n" + query
         return prompt_builder.run(question=query, db_schemas=db_schemas)
@@ -312,9 +297,7 @@ def prompt(
 
 
 @observe(as_type="generation", capture_input=False)
-async def filter_columns_in_tables(
-    prompt: dict, table_columns_selection_generator: Any
-) -> dict:
+async def filter_columns_in_tables(prompt: dict, table_columns_selection_generator: Any) -> dict:
     if prompt:
         return await table_columns_selection_generator(prompt=prompt.get("prompt"))
     else:
@@ -329,9 +312,17 @@ def construct_retrieval_results(
     dbschema_retrieval: list[Document],
 ) -> dict[str, Any]:
     if filter_columns_in_tables:
-        columns_and_tables_needed = orjson.loads(
-            filter_columns_in_tables["replies"][0]
-        )["results"]
+        reply = filter_columns_in_tables["replies"][0]
+        print(f"reply: {reply}")
+        # json_start = reply.find("{")
+        # json_end = reply.find("```", json_start)
+        # if json_start != -1 and json_end != -1:
+        #     json_str = reply[json_start:json_end].strip()
+        # else:
+        #     raise ValueError("Invalid JSON format")
+        json_str = clean_generation_result(reply)
+        print(f"json_str: {json_str}")
+        columns_and_tables_needed = orjson.loads(json_str)["results"]
 
         # we need to change the below code to match the new schema of structured output
         # the objective of this loop is to change the structure of JSON to match the needed format
@@ -348,9 +339,7 @@ def construct_retrieval_results(
             if table_schema["type"] == "TABLE" and table_schema["name"] in tables:
                 ddl, _has_calculated_field = build_table_ddl(
                     table_schema,
-                    columns=set(
-                        columns_and_tables_needed[table_schema["name"]]["columns"]
-                    ),
+                    columns=set(columns_and_tables_needed[table_schema["name"]]["columns"]),
                     tables=tables,
                 )
                 has_calculated_field = has_calculated_field or _has_calculated_field
@@ -391,9 +380,7 @@ def construct_retrieval_results(
 
         return {
             "retrieval_results": retrieval_results,
-            "has_calculated_field": check_using_db_schemas_without_pruning[
-                "has_calculated_field"
-            ],
+            "has_calculated_field": check_using_db_schemas_without_pruning["has_calculated_field"],
             "has_metric": check_using_db_schemas_without_pruning["has_metric"],
         }
 
@@ -450,9 +437,7 @@ class Retrieval(BasicPipeline):
                 system_prompt=table_columns_selection_system_prompt,
                 generation_kwargs=RETRIEVAL_MODEL_KWARGS,
             ),
-            "prompt_builder": PromptBuilder(
-                template=table_columns_selection_user_prompt_template
-            ),
+            "prompt_builder": PromptBuilder(template=table_columns_selection_user_prompt_template),
         }
 
         # for the first time, we need to load the encodings
@@ -467,9 +452,7 @@ class Retrieval(BasicPipeline):
             "allow_using_db_schemas_without_pruning": allow_using_db_schemas_without_pruning,
         }
 
-        super().__init__(
-            AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult())
-        )
+        super().__init__(AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult()))
 
     @observe(name="Ask Retrieval")
     async def run(

@@ -291,7 +291,13 @@ class ChartGenerationPostProcessor:
         remove_data_from_chart_schema: Optional[bool] = True,
     ):
         try:
-            generation_result = orjson.loads(replies[0])
+            reply = replies[0]
+            json_start = reply.find("{")
+            json_end = reply.rfind("}")
+            if json_start == -1 or json_end == -1:
+                raise ValueError("Invalid JSON format in the reply")
+            json_str = reply[json_start : json_end + 1]
+            generation_result = orjson.loads(json_str)
             reasoning = generation_result.get("reasoning", "")
             chart_type = generation_result.get("chart_type", "")
             if chart_schema := generation_result.get("chart_schema", {}):
@@ -299,9 +305,7 @@ class ChartGenerationPostProcessor:
                 if isinstance(chart_schema, str):
                     chart_schema = orjson.loads(chart_schema)
 
-                chart_schema[
-                    "$schema"
-                ] = "https://vega.github.io/schema/vega-lite/v5.json"
+                chart_schema["$schema"] = "https://vega.github.io/schema/vega-lite/v5.json"
                 chart_schema["data"] = {"values": sample_data}
 
                 validate(chart_schema, schema=vega_schema)

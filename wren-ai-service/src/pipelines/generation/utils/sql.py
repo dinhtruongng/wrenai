@@ -78,9 +78,7 @@ class SQLBreakdownGenPostProcessor:
 
     def _build_cte_query(self, steps) -> str:
         ctes = ",\n".join(
-            f"{step['cte_name']} AS ({step['sql']})"
-            for step in steps
-            if step["cte_name"]
+            f"{step['cte_name']} AS ({step['sql']})" for step in steps if step["cte_name"]
         )
 
         return f"WITH {ctes}\n" + steps[-1]["sql"] if ctes else steps[-1]["sql"]
@@ -100,9 +98,7 @@ class SQLBreakdownGenPostProcessor:
             )
 
         if not status:
-            logger.exception(
-                f"SQL is not executable: {addition.get('error_message', '')}"
-            )
+            logger.exception(f"SQL is not executable: {addition.get('error_message', '')}")
 
         return status
 
@@ -128,16 +124,22 @@ class SQLGenPostProcessor:
                 for reply in replies:
                     try:
                         cleaned_generation_result.append(
-                            orjson.loads(clean_generation_result(reply["replies"][0]))[
-                                "sql"
-                            ]
+                            orjson.loads(clean_generation_result(reply["replies"][0]))["sql"]
                         )
                     except Exception as e:
                         logger.exception(f"Error in SQLGenPostProcessor: {e}")
             else:
-                cleaned_generation_result = orjson.loads(
-                    clean_generation_result(replies[0])
-                )["sql"]
+                reply = replies[0]
+                print(f"reply: {reply}")
+                # json_start = reply.rfind("```json")
+                # json_end = reply.rfind("}")
+                # if json_start == -1 or json_end == -1:
+                #     raise ValueError("Invalid JSON format")
+                # json_str = reply[json_start : json_end + 1].strip()
+                # print(f"json_str: {json_str}")
+                cleaned_json_str = clean_generation_result(reply)
+                print(f"cleaned_json_str: {cleaned_json_str}")
+                cleaned_generation_result = orjson.loads(cleaned_json_str)["sql"]
 
             if isinstance(cleaned_generation_result, str):
                 cleaned_generation_result = [cleaned_generation_result]
@@ -209,9 +211,7 @@ class SQLGenPostProcessor:
                 )
 
         async with aiohttp.ClientSession() as session:
-            tasks = [
-                _task(generation_result) for generation_result in generation_results
-            ]
+            tasks = [_task(generation_result) for generation_result in generation_results]
             await asyncio.gather(*tasks)
 
         return valid_generation_results, invalid_generation_results

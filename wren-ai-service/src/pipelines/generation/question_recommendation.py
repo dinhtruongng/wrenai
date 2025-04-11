@@ -53,8 +53,13 @@ def normalized(generate: dict) -> dict:
     def wrapper(text: str) -> list:
         text = text.replace("\n", " ")
         text = " ".join(text.split())
+        json_start = text.find("{")
+        json_end = text.rfind("}")
         try:
-            text_list = orjson.loads(text.strip())
+            if json_start == -1 or json_end == -1:
+                raise ValueError("Invalid JSON format")
+            json_str = text[json_start : json_end + 1].strip()
+            text_list = orjson.loads(json_str)
             return text_list
         except orjson.JSONDecodeError as e:
             logger.error(f"Error decoding JSON: {e}")
@@ -244,9 +249,7 @@ class QuestionRecommendation(BasicPipeline):
 
         self._final = "normalized"
 
-        super().__init__(
-            AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult())
-        )
+        super().__init__(AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult()))
 
     @observe(name="Question Recommendation")
     async def run(

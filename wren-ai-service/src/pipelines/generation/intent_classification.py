@@ -141,9 +141,7 @@ Let's think step by step
 async def embedding(
     query: str, embedder: Any, histories: Optional[list[AskHistory]] = None
 ) -> dict:
-    previous_query_summaries = (
-        [history.question for history in histories] if histories else []
-    )
+    previous_query_summaries = [history.question for history in histories] if histories else []
 
     query = "\n".join(previous_query_summaries) + "\n" + query
 
@@ -151,9 +149,7 @@ async def embedding(
 
 
 @observe(capture_input=False)
-async def table_retrieval(
-    embedding: dict, project_id: str, table_retriever: Any
-) -> dict:
+async def table_retrieval(embedding: dict, project_id: str, table_retriever: Any) -> dict:
     filters = {
         "operator": "AND",
         "conditions": [
@@ -162,9 +158,7 @@ async def table_retrieval(
     }
 
     if project_id:
-        filters["conditions"].append(
-            {"field": "project_id", "operator": "==", "value": project_id}
-        )
+        filters["conditions"].append({"field": "project_id", "operator": "==", "value": project_id})
 
     return await table_retriever.run(
         query_embedding=embedding.get("embedding"),
@@ -185,8 +179,7 @@ async def dbschema_retrieval(
     logger.info(f"dbschema_retrieval with table_names: {table_names}")
 
     table_name_conditions = [
-        {"field": "name", "operator": "==", "value": table_name}
-        for table_name in table_names
+        {"field": "name", "operator": "==", "value": table_name} for table_name in table_names
     ]
 
     filters = {
@@ -198,9 +191,7 @@ async def dbschema_retrieval(
     }
 
     if project_id:
-        filters["conditions"].append(
-            {"field": "project_id", "operator": "==", "value": project_id}
-        )
+        filters["conditions"].append({"field": "project_id", "operator": "==", "value": project_id})
 
     results = await dbschema_retriever.run(
         query_embedding=embedding.get("embedding"), filters=filters
@@ -274,7 +265,14 @@ async def classify_intent(prompt: dict, generator: Any) -> dict:
 @observe(capture_input=False)
 def post_process(classify_intent: dict, construct_db_schemas: list[str]) -> dict:
     try:
-        results = orjson.loads(classify_intent.get("replies")[0])
+        reply = classify_intent.get("replies")[0]
+        json_start = reply.find("{")
+        json_end = reply.rfind("}")
+        if json_start == -1 or json_end == -1:
+            raise ValueError("Invalid JSON format")
+        else:
+            json_str = reply[json_start : json_end + 1]
+        results = orjson.loads(json_str)
         return {
             "intent": results["results"],
             "rephrased_question": results["rephrased_question"],
@@ -334,14 +332,10 @@ class IntentClassification(BasicPipeline):
                 system_prompt=intent_classification_system_prompt,
                 generation_kwargs=INTENT_CLASSIFICAION_MODEL_KWARGS,
             ),
-            "prompt_builder": PromptBuilder(
-                template=intent_classification_user_prompt_template
-            ),
+            "prompt_builder": PromptBuilder(template=intent_classification_user_prompt_template),
         }
 
-        super().__init__(
-            AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult())
-        )
+        super().__init__(AsyncDriver({}, sys.modules[__name__], result_builder=base.DictResult()))
 
     @observe(name="Intent Classification")
     async def run(
