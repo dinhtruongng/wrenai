@@ -65,6 +65,7 @@ export const typeDefs = gql`
     RU
     JA
     KO
+    VI_VN
   }
 
   type DataSource {
